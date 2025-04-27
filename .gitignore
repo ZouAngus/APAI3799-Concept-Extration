@@ -1,0 +1,10 @@
+# evaluation compositions
+/evaluate/sim_composition/**
+/evaluate/sim_identity/** 
+
+
+# general outputs
+/outputs/**
+
+# segmentation results
+/segment/segment_results/**
