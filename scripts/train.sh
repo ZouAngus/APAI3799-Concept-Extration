@@ -1,5 +1,9 @@
 #!/bin/bash
 
+DATA_DIR="./segment/segment_results/00"
+MODEL_PATH="./outputs/test/word_init/00"
+
+
 # Function to handle errors
 error_handler() {
     echo "Error occurred in script at line: $1"
@@ -9,12 +13,12 @@ error_handler() {
 # Trap errors and call the error_handler function
 trap 'error_handler $LINENO' ERR
 
-python train_vanilla.py \
-    --instance_data_dir ./segment/results-1/00\
+python train.py \
+    --instance_data_dir $DATA_DIR \
     --class_data_dir outputs/preservation_images/ \
     --phase1_train_steps 500 \
     --phase2_train_steps 0 \
-    --output_dir outputs/reproduce_output/vanilla/0 \
+    --output_dir $MODEL_PATH \
     --use_8bit_adam \
     --set_grads_to_none \
     --noise_offset 0.1 \

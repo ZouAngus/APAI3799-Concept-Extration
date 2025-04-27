@@ -63,6 +63,7 @@ class ConceptExtraction:
     def __init__(self):
         self.args = parse_args()
         self.main()
+        
 
     def main(self):
         logging_dir = Path(self.args.output_dir, self.args.logging_dir)
@@ -163,16 +164,30 @@ class ConceptExtraction:
         # ***************** Process datasets *****************
         dataset_path = self.args.instance_data_dir
         image_path = os.path.join(dataset_path, "img.jpg")
-        mask_paths = [f for f in os.listdir(dataset_path) if f.startswith("mask")]
+        # collect and sort mask files by their numeric index
+        mask_paths = sorted(
+            [f for f in os.listdir(dataset_path) if f.startswith("mask_")],
+            key=lambda x: int(x.split("_")[1].split(".")[0])
+        )
+        
+        ### for semantic initialization
+        semantic_dir = Path(dataset_path, "semantic_mask")
+        object_anchors = []
+        for m in mask_paths:
+            idx = m.split("_")[1].split(".")[0]
+            # find semantic_mask_{idx}_*.png and take the middle part as word
+            sm = list(semantic_dir.glob(f"semantic_mask_{idx}_*.png"))
+            if sm:
+                vocab = sm[0].stem.split("_")[3]
+            else:
+                vocab = f"asset{idx}"
+            object_anchors.append(vocab)
 
         self.num_of_assets = len(mask_paths)
 
-        # self.object_anchors = []
-        # for mask_file in mask_paths:
-        #     object_name = mask_file.split("_")[1]
-        #     self.object_anchors.append(object_name)
         # ***************** Process datasets *****************
-        self.asset_tokens = [self.args.asset_token.replace(">", f"{idx}>") for idx in range(self.num_of_assets)]
+        # asset0 … assetN exactly match the sorted masks
+        self.asset_tokens = [self.args.asset_token.replace(">", f"{i}>") for i in range(self.num_of_assets)]
 
         # add asset tokens to tokenizer
         num_added_tokens = self.tokenizer.add_tokens(self.asset_tokens)
@@ -187,15 +202,40 @@ class ConceptExtraction:
         # Resize the token embeddings
         self.text_encoder.resize_token_embeddings(len(self.tokenizer))
 
+        ### initialize with the word from semantic mask
         token_embeds = self.text_encoder.get_input_embeddings().weight.data
-        # for tkn_idx, initializer_token in enumerate(self.object_anchors):
-        #     # initialize the concept specific token embeddings
-        #     curr_token_ids = self.tokenizer.encode(initializer_token, add_special_tokens=False)
-        #     token_embeds[self.placeholder_token_ids["asset"][tkn_idx]] = token_embeds[curr_token_ids[0]]  
+        for tkn_idx, init_word in enumerate(object_anchors):
+            # encode the descriptive word and copy its embedding
+            curr_ids = self.tokenizer.encode(init_word, add_special_tokens=False)
+            if curr_ids:
+                token_embeds[self.placeholder_token_ids["asset"][tkn_idx]] = token_embeds[curr_ids[0]]
 
         # Prepare placeholder tokens
         self.placeholder_tokens= [f"{asset}" for asset in self.asset_tokens]
+        
+        ### Debug: print asset-to-word mapping
+        for tkn_idx, init_word in enumerate(object_anchors):
+            print(f"Asset token '{self.asset_tokens[tkn_idx]}' initialized with word '{init_word}'")
 
+        # ### --- Debug: verify initialization ---
+        # embeds = self.text_encoder.get_input_embeddings().weight.data
+        # for tkn_idx, init_word in enumerate(object_anchors):
+        #     asset_id = self.placeholder_token_ids["asset"][tkn_idx]
+        #     # take first sub‑token of init_word
+        #     word_ids = self.tokenizer.encode(init_word, add_special_tokens=False)
+        #     if not word_ids:
+        #         continue
+        #     word_id = word_ids[0]
+        #     asset_emb = embeds[asset_id].unsqueeze(0)
+        #     word_emb  = embeds[word_id].unsqueeze(0)
+        #     cos_sim   = F.cosine_similarity(asset_emb, word_emb).item()
+        #     l2_diff   = (asset_emb - word_emb).norm().item()
+        #     print(
+        #         f"[check] '{self.asset_tokens[tkn_idx]}' vs '{init_word}': "
+        #         f"cosine={cos_sim:.4f}, l2_diff={l2_diff:.4f}"
+        #     )
+        # # -----------------------------
+        
         # Set validation scheduler for logging
         self.validation_scheduler = DDIMScheduler(
             beta_start=0.00085,

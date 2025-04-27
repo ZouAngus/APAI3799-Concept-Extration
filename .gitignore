@@ -5,6 +5,8 @@
 
 # general outputs
 /outputs/**
+/inference/**
 
 # segmentation results
 /segment/segment_results/**
+
