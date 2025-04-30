@@ -110,6 +110,37 @@ def parse_args(input_args=None):
     parser.add_argument("--t_dist", type=float, default=0.0, help="Temperature for the weighted timestep based on ReVersion",)
     parser.add_argument("--asset_token", type=str, default="<asset>", help="A token to use as a concept-specific placeholder for the concept.",)
     parser.add_argument("--text_encoder_use_attention_mask", action="store_true", required=False, help="Whether to use attention mask for the text encoder",)
+    parser.add_argument(
+        "--lambda_contrastive",
+        type=float,
+        default=0.06,
+        help="Weight for pairwise contrastive loss among learned tokens.",
+    )
+    parser.add_argument(
+        "--contrast_margin",
+        type=float,
+        default=0.5,
+        help="Margin used in the pairwise contrastive loss.",
+    )
+    # background placeholder for contrastive reg
+    parser.add_argument(
+        "--background_token",
+        type=str,
+        default="<background>",
+        help="Placeholder token to represent background in contrastive loss.",
+    )
+    parser.add_argument(
+        "--use_background_token",
+        action="store_true",
+        default=False,
+        help="Include a background token in the contrastive loss.",
+    )
+    parser.add_argument(
+        "--background_token_id",
+        type=int,
+        default=None,
+        help="Token ID of the background placeholder for contrastive regularization.",
+    )
 
     if input_args is not None: args = parser.parse_args(input_args)
     else: args = parser.parse_args()

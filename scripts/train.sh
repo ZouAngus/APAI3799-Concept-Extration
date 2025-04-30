@@ -1,7 +1,8 @@
 #!/bin/bash
+export CUDA_VISIBLE_DEVICES=2
 
 DATA_DIR="./segment/segment_results/00"
-MODEL_PATH="./outputs/test/word_init/00"
+MODEL_PATH="./outputs/test/word_init_dynamic/00"
 
 
 # Function to handle errors
@@ -13,7 +14,9 @@ error_handler() {
 # Trap errors and call the error_handler function
 trap 'error_handler $LINENO' ERR
 
-python train.py \
+mkdir -p $MODEL_PATH
+
+python train_init_attn_ctl.py \
     --instance_data_dir $DATA_DIR \
     --class_data_dir outputs/preservation_images/ \
     --phase1_train_steps 500 \

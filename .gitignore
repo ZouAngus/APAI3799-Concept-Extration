@@ -6,6 +6,8 @@
 # general outputs
 /outputs/**
 /inference/**
+/evaluate/word_init
+/evaluate/vanilla
 
 # segmentation results
 /segment/segment_results/**

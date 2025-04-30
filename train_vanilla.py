@@ -163,7 +163,11 @@ class ConceptExtraction:
         # ***************** Process datasets *****************
         dataset_path = self.args.instance_data_dir
         image_path = os.path.join(dataset_path, "img.jpg")
-        mask_paths = [f for f in os.listdir(dataset_path) if f.startswith("mask")]
+        mask_paths = sorted(
+            [f for f in os.listdir(dataset_path) if f.startswith("mask_")],
+            key=lambda x: int(x.split("_")[1].split(".")[0])
+        )
+        
 
         self.num_of_assets = len(mask_paths)
 
