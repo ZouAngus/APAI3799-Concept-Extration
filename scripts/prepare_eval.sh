@@ -3,7 +3,7 @@
 
 export TF_CPP_MIN_LOG_LEVEL=2
 segment_dir="./segment/segment_results"
-model_dir="./outputs/vanilla"
+model_dir="./outputs/word_init_loss"
 sim_i_dir="./evaluate/sim_identity" 
 sim_c_dir="./evaluate/sim_composition"
 
@@ -14,7 +14,7 @@ mkdir -p $sim_c_dir
 for i in $(seq -w 0 95)
 do
     # Training the model:
-    python train_vanilla.py \
+    python train_init_loss.py \
         --instance_data_dir $segment_dir/$i/ \
         --class_data_dir outputs/preservation_images/ \
         --phase1_train_steps 500 \
@@ -25,6 +25,9 @@ do
         --noise_offset 0.1 \
         --t_dist 0.5 \
         --lambda_attention 1e-5 \
+        --lambda_ortho 0 \
+        --lambda_smooth 0 \
+        --lambda_consistency 1e-5 \
         --seed 20 \
         --prior_loss_weight 0.0 \
 

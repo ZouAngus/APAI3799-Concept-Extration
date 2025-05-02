@@ -64,7 +64,7 @@ class ConceptExtraction:
         self.args = parse_args()
         self.main()
         
-
+    
     def main(self):
         logging_dir = Path(self.args.output_dir, self.args.logging_dir)
         accelerator_project_config = ProjectConfiguration(project_dir=self.args.output_dir, logging_dir=logging_dir)
@@ -687,22 +687,36 @@ class ConceptExtraction:
             attn_loss = self._compute_attention_loss(batch, text_inputs, global_step)
             loss += attn_loss
             logs["attn_loss"] = attn_loss.detach().item()
-            
-        
+
         # ----- MODIFIED: Orthogonality Regularization -----
-        emb = encoder_hidden_states.mean(dim=1)  # [B, D]
-        ortho_loss = self._compute_orthogonality_loss(emb)
-        loss = loss + self.args.lambda_ortho * ortho_loss
-        logs["orthogonality_loss"] = ortho_loss.detach().item()
+        if self.args.lambda_ortho > 0:
+            emb = encoder_hidden_states.mean(dim=1)  # [B, D]
+            ortho_loss = self._compute_orthogonality_loss(emb)
+            loss = loss + self.args.lambda_ortho * ortho_loss
+            logs["orthogonality_loss"] = ortho_loss.detach().item()
         # ---------------------------------------------------
 
-        # ----- MODIFIED: Smoothness Regularization -----
-        similarity_matrix = self.similarity_matrix  # assume set elsewhere
-        smooth_loss = self._compute_smoothness_loss(emb, batch["labels"], similarity_matrix)
-        loss = loss + self.args.lambda_smooth * smooth_loss
-        logs["smoothness_loss"] = smooth_loss.detach().item()
-        # ------------------------------------------------
-            
+        # ----- Cosine Smoothness Regularization -----
+        if self.args.lambda_smooth > 0:
+            smooth_loss = self._compute_cosine_smoothness_loss(emb, lambda_smooth=self.args.lambda_smooth)
+            loss = loss + smooth_loss
+            logs["smoothness_loss"] = smooth_loss.detach().item()
+        # ------------------------------------------
+        
+        # ----- MODIFIED: Augmentation‐Consistency Loss (latent) -----
+        if self.args.lambda_consistency > 0:
+            imgs = batch["pixel_values"]  # [B, C, H, W]
+            # random horizontal flip
+            aug = imgs.flip(-1) if random.random() < 0.5 else imgs
+            # encode & scale both original & augmented
+            lat_orig = self.vae.encode(imgs.to(dtype=self.weight_dtype)).latent_dist.sample() * 0.18215
+            lat_aug  = self.vae.encode(aug.to(dtype=self.weight_dtype)).latent_dist.sample() * 0.18215
+            # latent‐space consistency loss
+            consis = F.mse_loss(lat_orig, lat_aug, reduction="mean")
+            loss += self.args.lambda_consistency * consis
+            logs["consistency_loss"] = consis.detach().item()
+        # --------------------------------------------------------------
+  
         return loss, logs
 
     def _compute_diffusion_loss(self, model_pred, target, batch, with_prior_preservation):
@@ -762,6 +776,47 @@ class ConceptExtraction:
                 attn_loss += wasser_loss(GT_masks[mask_id, 0].float(), asset_attn_mask.float())
 
         return self.args.lambda_attention * (attn_loss / self.args.train_batch_size)
+    
+    def _compute_orthogonality_loss(self, embeddings):
+        """
+        Apply orthogonality regularization to the embeddings.
+        Encourages concept embeddings to be orthogonal.
+        """
+        # Normalize embeddings to control their magnitudes
+        embeddings = F.normalize(embeddings, p=2, dim=-1)
+
+        num_embeddings = embeddings.size(0)
+        loss = 0.0
+
+        # Compute the dot product between different embeddings
+        for i in range(num_embeddings):
+            for j in range(i + 1, num_embeddings):
+                dot_product = torch.dot(embeddings[i], embeddings[j])
+                loss += dot_product**2  # We penalize the square of the dot product
+
+        return loss
+
+
+    def _compute_cosine_smoothness_loss(self, embeddings, lambda_smooth=1.0):
+        """
+        Compute smoothness regularization based on cosine similarity.
+        Encourages similar concepts to have higher cosine similarity (more aligned).
+        """
+        loss = 0.0
+        num_embeddings = embeddings.size(0)
+
+        # Compute cosine similarity between each pair of embeddings in the batch
+        for i in range(num_embeddings):
+            for j in range(i + 1, num_embeddings):
+                # Compute cosine similarity between two embeddings
+                sim = F.cosine_similarity(embeddings[i].unsqueeze(0), embeddings[j].unsqueeze(0))
+                
+                # Apply smoothness regularization: higher similarity means lower loss
+                loss += (1 - sim)  # Penalize dissimilar embeddings
+
+        return lambda_smooth * loss
+
+
 
     def _clip_gradients(self):
         """Clip gradients to prevent exploding gradients"""

@@ -141,6 +141,11 @@ def parse_args(input_args=None):
         default=None,
         help="Token ID of the background placeholder for contrastive regularization.",
     )
+    # Regularization weights
+    parser.add_argument("--lambda_ortho", type=float, default=1e-5, help="Weight for orthogonality loss.")
+    parser.add_argument("--lambda_smooth", type=float, default=1e-5, help="Weight for smoothness loss.")
+    parser.add_argument("--lambda_consistency", type=float, default=1e-5, help="Weight for augmentation‐consistency loss.")
+    
 
     if input_args is not None: args = parser.parse_args(input_args)
     else: args = parser.parse_args()
