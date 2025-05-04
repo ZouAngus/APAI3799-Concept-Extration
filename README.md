@@ -1,7 +1,20 @@
-# Concept extraction framework guide
+# Concept extraction framework
+This code repo is based on the Concept Extraction Framework code from Fernando Julio Cendra (cendra@hku.hk), which is modified from: ConceptExpress: https://github.com/haoosz/ConceptExpress.
+Segmentation code for "DiffSeg: A Segmentation Model for Skin Lesions Based on Diffusion Difference" is also applied for segmentation.
 
-This guide provides instructions on how to train and run inference with the concept extraction framework.
+`@article{tian2023diffuse,
+ title={Diffuse, Attend, and Segment: Unsupervised Zero-Shot Segmentation using Stable Diffusion},
+ author={Tian, Junjiao and Aggarwal, Lavisha and Colaco, Andrea and Kira, Zsolt and Gonzalez-Franco, Mar},
+ journal={arXiv preprint arXiv:2308.12469},
+ year={2023}
+}`
 
+`@InProceedings{hao2024conceptexpress,
+    title={Concept{E}xpress: Harnessing Diffusion Models for Single-image Unsupervised Concept Extraction}, 
+    author={Shaozhe Hao and Kai Han and Zhengyao Lv and Shihao Zhao and Kwan-Yee~K. Wong},
+    booktitle={ECCV},
+    year={2024},
+}`
 
 ## Training
 
@@ -20,17 +33,22 @@ This guide provides instructions on how to train and run inference with the conc
         *   `--phase2_train_steps`: Number of training steps for the second phase.
         *   `--output_dir`: Path to the output directory for saving the trained model.
         *   `--lambda_attention`: The weight of attention loss.
+        *   `--lambda_cls`: The weight of classification loss.
         *   `--t_dist`: Temperature for the weighted timestep based on ReVersion.
         *   `--noise_offset`:  The offset for noise.
         *   `--asset_token`: The concept-specific placeholder token.
 
 3.  **Run the training script:**
 
-    Execute the `scripts/run.sh` script to start the training process.
+    Execute the `scripts/train.sh` script to start the training process.
 
     ```bash
     CUDA_VISIBLE_DEVICES=0 bash scripts/run.sh
     ```
+
+4.  **Run the training script:**
+
+   Execute the `scripts/evaluate.sh` script to generate the necessary files for evaluation. This may take very long time
 
 ## Inference
 
@@ -50,3 +68,4 @@ This guide provides instructions on how to train and run inference with the conc
     ```bash
     CUDA_VISIBLE_DEVICES=0 bash scripts/infer.sh
     ```
+
