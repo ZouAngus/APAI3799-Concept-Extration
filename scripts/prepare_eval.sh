@@ -25,10 +25,7 @@ do
         --noise_offset 0.1 \
         --t_dist 0.5 \
         --lambda_attention 1e-5 \
-        --lambda_ortho 0 \
-        --lambda_smooth 0 \
-        --lambda_consistency 1e-5 \
-        --seed 20 \
+        --lambda_cls 1e-3 \
         --prior_loss_weight 0.0 \
 
     # read mask direc\

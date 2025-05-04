@@ -14,6 +14,7 @@ import random
 from pathlib import Path
 from tqdm.auto import tqdm
 from typing import List
+import traceback
 
 import numpy as np
 import torch
@@ -235,7 +236,19 @@ class ConceptExtraction:
         #         f"cosine={cos_sim:.4f}, l2_diff={l2_diff:.4f}"
         #     )
         # # -----------------------------
-        
+
+        # --- ASSET-CLS INIT ---
+        D = self.text_encoder.config.hidden_size
+        # linear head to predict which placeholder-token was used
+        self.asset_classifier = torch.nn.Linear(D, len(self.placeholder_token_ids['asset']))
+        # register so .to(device) moves it automatically
+        self.asset_classifier.to(self.accelerator.device)
+        # weight for this loss
+        self.lambda_cls = self.args.lambda_cls
+        # --- end ASSET-CLS INIT ---
+            
+            
+            
         # Set validation scheduler for logging
         self.validation_scheduler = DDIMScheduler(
             beta_start=0.00085,
@@ -657,6 +670,7 @@ class ConceptExtraction:
         text_inputs = tokenize_prompt(self.tokenizer, [prompt])
         encoder_hidden_states = encode_prompt(self.text_encoder, text_inputs.input_ids)
         
+        
         # Handle class conditioning if using prior preservation
         if self.args.with_prior_preservation:
             encoder_class_hidden_states = encode_prompt(
@@ -681,12 +695,33 @@ class ConceptExtraction:
 
         # Compute the main diffusion loss
         loss = self._compute_diffusion_loss(model_pred, target, batch, self.args.with_prior_preservation)
+        
+        
+        # --- ASSET-CLS LOSS START ---
+        if self.lambda_cls > 0:
+            # how many “conditional” examples are in model_pred?
+            bsz = model_pred.shape[0] // (2 if self.args.with_prior_preservation else 1)
+            # grab just the conditional embeddings
+            cond = encoder_hidden_states[-bsz:]       # [B, L, D]
+            pooled = cond.mean(dim=1)                 # [B, D]
+
+            # compute logits: [B, num_assets]
+            logits = self.asset_classifier(pooled)
+
+            # extract the placeholder token index from each input
+            # assume placeholder is at position 0 in token_ids
+            labels = batch["token_ids"][:, 0].to(logits.device)  # [B]
+
+            cls_loss = F.cross_entropy(logits, labels)
+            loss = loss + self.lambda_cls * cls_loss
+            logs["cls_loss"] = cls_loss.detach().item()
+        # --- ASSET-CLS LOSS END ---
 
         # Compute attention-based spatial guidance loss if enabled
         if self.args.lambda_attention != 0:
             attn_loss = self._compute_attention_loss(batch, text_inputs, global_step)
             loss += attn_loss
-            logs["attn_loss"] = attn_loss.detach().item()
+            logs["attn_loss"]   = attn_loss.detach().item()
 
         # ----- MODIFIED: Orthogonality Regularization -----
         if self.args.lambda_ortho > 0:
@@ -703,19 +738,36 @@ class ConceptExtraction:
             logs["smoothness_loss"] = smooth_loss.detach().item()
         # ------------------------------------------
         
-        # ----- MODIFIED: Augmentation‐Consistency Loss (latent) -----
-        if self.args.lambda_consistency > 0:
-            imgs = batch["pixel_values"]  # [B, C, H, W]
-            # random horizontal flip
-            aug = imgs.flip(-1) if random.random() < 0.5 else imgs
-            # encode & scale both original & augmented
-            lat_orig = self.vae.encode(imgs.to(dtype=self.weight_dtype)).latent_dist.sample() * 0.18215
-            lat_aug  = self.vae.encode(aug.to(dtype=self.weight_dtype)).latent_dist.sample() * 0.18215
-            # latent‐space consistency loss
-            consis = F.mse_loss(lat_orig, lat_aug, reduction="mean")
-            loss += self.args.lambda_consistency * consis
-            logs["consistency_loss"] = consis.detach().item()
-        # --------------------------------------------------------------
+        # # ----- Augmentation-Consistency Loss on UNet predictions -----
+        # if self.args.lambda_consistency > 0:
+        #     imgs = batch["pixel_values"]  # original images
+        #     aug = imgs.flip(-1) if random.random() < 0.5 else imgs  # augmented images (horizontal flip)
+
+        #     # Encode both images to latents
+        #     lat_orig = self.vae.encode(imgs.to(dtype=self.weight_dtype)).latent_dist.sample() * 0.18215
+        #     lat_aug = self.vae.encode(aug.to(dtype=self.weight_dtype)).latent_dist.sample() * 0.18215
+
+        #     # Reuse the same noise and timesteps for fair comparison
+        #     noise = torch.randn_like(lat_orig)
+        #     timesteps = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (lat_orig.shape[0],), device=lat_orig.device).long()
+
+        #     noisy_orig = self.noise_scheduler.add_noise(lat_orig, noise, timesteps)
+        #     noisy_aug = self.noise_scheduler.add_noise(lat_aug, noise, timesteps)
+
+        #     # Predict noise with UNet for original and augmented latents
+        #     pred_orig = self.unet(noisy_orig, timesteps, encoder_hidden_states).sample
+        #     pred_aug = self.unet(noisy_aug, timesteps, encoder_hidden_states).sample
+
+        #     # Consistency loss directly on UNet predictions
+        #     consis_loss = F.mse_loss(pred_orig, pred_aug, reduction="mean")
+
+        #     # Add to total loss
+        #     loss += self.args.lambda_consistency * consis_loss
+        #     logs["consistency_loss"] = consis_loss.detach().item()
+        # # -------------------------------------------------------------
+
+
+
   
         return loss, logs
 
@@ -921,7 +973,7 @@ def main():
     
     '''Start training...'''
     try: ce.train()
-    except Exception as e: logger.error(f"An error occurred: {e}")
+    except Exception as e: traceback.print_exc(e)
     finally: torch.cuda.empty_cache()
             
 if __name__ == "__main__":

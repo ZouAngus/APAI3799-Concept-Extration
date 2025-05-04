@@ -1,8 +1,8 @@
 #!/bin/bash
 export CUDA_VISIBLE_DEVICES=2
 
-DATA_DIR="./segment/segment_results/00"
-MODEL_PATH="./outputs/test/fined_tuned/00"
+DATA_DIR="./segment/segment_results/02"
+MODEL_PATH="./outputs/test/fined_tuned/02"
 
 
 # Function to handle errors
@@ -30,7 +30,6 @@ python train_init_loss.py \
     --lambda_ortho 0 \
     --lambda_smooth 0 \
     --lambda_consistency 1e-5 \
-    --seed 20 \
     --prior_loss_weight 0.0 \
 
 # # Iterate over the images in the directory

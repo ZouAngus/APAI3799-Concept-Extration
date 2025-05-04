@@ -1,5 +1,5 @@
 #!/bin/bash
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=1,2
 
 DATA_DIR="./segment/segment_results/00"
 MODEL_PATH="./outputs/test/word_init_loss/00"
@@ -27,10 +27,7 @@ python train_init_loss.py \
     --noise_offset 0.1 \
     --t_dist 0.5 \
     --lambda_attention 1e-5 \
-    --lambda_ortho 0 \
-    --lambda_smooth 0 \
-    --lambda_consistency 1e-5 \
-    --seed 20 \
+    --lambda_cls 1e-3 \
     --prior_loss_weight 0.0 \
 
 # # Iterate over the images in the directory
